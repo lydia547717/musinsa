@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MUSINSA 代購訂單管理</title>
+<style>
+  :root{
+    --bg:#f6f6f4; --card:#fff; --ink:#1a1a1a; --muted:#77736c; --line:#e6e3de;
+    --accent:#111; --ok:#1f8a5b; --okbg:#e5f4ec; --warn:#b26a00; --warnbg:#fdf1dc;
+    --blue:#2f5fd0; --bluebg:#e7edfb; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  header{background:#111;color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10}
+  header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.5px}
+  header .tag{font-size:11px;background:#fff;color:#111;padding:2px 8px;border-radius:99px;font-weight:700}
+  header .sp{flex:1}
+  header button{background:transparent;border:1px solid #555;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer}
+  .mode{font-size:12px;padding:3px 10px;border-radius:99px}
+  .mode.demo{background:var(--warnbg);color:var(--warn)}
+  .mode.live{background:var(--okbg);color:var(--ok)}
+  main{max-width:1200px;margin:0 auto;padding:20px;display:grid;gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#111;color:#fff;font-size:12px}
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+  .stat .n{font-size:24px;font-weight:700;margin-top:4px}
+  .stat .l{color:var(--muted);font-size:12px}
+  /* upload */
+  .drop{border:2px dashed #cfcac2;border-radius:var(--radius);padding:28px;text-align:center;cursor:pointer;transition:.15s;background:#fbfaf8}
+  .drop.over{border-color:#111;background:#f0eee9}
+  .drop b{display:block;font-size:15px;margin-bottom:4px}
+  .drop small{color:var(--muted)}
+  .thumbs{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .thumb{position:relative;width:84px;height:120px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  .thumb .st{position:absolute;left:0;right:0;bottom:0;font-size:11px;text-align:center;background:rgba(0,0,0,.7);color:#fff;padding:3px}
+  /* preview table */
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}
+  td input[type=text],td input[type=number],td input:not([type]){width:100%;border:1px solid transparent;background:transparent;padding:5px 6px;border-radius:6px;font:inherit}
+  td input:hover{border-color:var(--line)}
+  td input:focus{outline:none;border-color:#111;background:#fff}
+  .num{text-align:right}
+  .row-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;align-items:center}
+  .btn{border:1px solid #111;background:#111;color:#fff;border-radius:8px;padding:8px 16px;cursor:pointer;font:inherit;font-weight:600}
+  .btn.ghost{background:#fff;color:#111}
+  .btn.sm{padding:4px 10px;font-size:12px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .hint{color:var(--muted);font-size:12px}
+  .empty{color:var(--muted);text-align:center;padding:24px}
+  /* list */
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .tab{border:1px solid var(--line);background:#fff;border-radius:99px;padding:5px 12px;cursor:pointer;font-size:13px}
+  .tab.on{background:#111;color:#fff;border-color:#111}
+  .search{flex:1;min-width:180px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit}
+  .pill{display:inline-flex;align-items:center;gap:4px;border-radius:99px;padding:4px 10px;font-size:12px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--muted);user-select:none;white-space:nowrap}
+  .pill.on.pay{background:var(--okbg);color:var(--ok);border-color:transparent}
+  .pill.on.arr{background:var(--bluebg);color:var(--blue);border-color:transparent}
+  .pill.on.shp{background:#111;color:#fff;border-color:transparent}
+  .buyer{font-weight:600}
+  .prod{max-width:300px}
+  .prod .b{font-size:11px;color:var(--muted)}
+  .prod .o{font-size:12px;color:var(--muted)}
+  .scroll{overflow-x:auto}
+  /* modal */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;place-items:center;z-index:20}
+  .mask.on{display:grid}
+  .modal{background:#fff;border-radius:var(--radius);padding:22px;width:min(520px,92vw)}
+  .modal h3{margin:0 0 10px}
+  .modal label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
+  .modal input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:99px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
+  .toast.on{opacity:1}
+  @media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)} main{padding:12px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>MUSINSA 代購訂單管理</h1><span class="tag">BETA</span>
+  <span id="modeBadge" class="mode demo">示範模式</span>
+  <span class="sp"></span>
+  <button onclick="openSettings()">⚙ 設定</button>
+</header>
+
+<main>
+  <!-- stats -->
+  <div class="stats" id="stats"></div>
+
+  <!-- step 1 -->
+  <section class="card">
+    <h2><span class="step">1</span>上傳 MUSINSA 訂單截圖</h2>
+    <div class="drop" id="drop">
+      <b>拖曳截圖到這裡，或點擊選擇檔案</b>
+      <small>可一次多張 · 也可以直接 Ctrl/⌘+V 貼上截圖</small>
+      <input type="file" id="file" accept="image/*" multiple hidden>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+    <p id="demoWarn" class="hint" style="background:var(--warnbg);color:var(--warn);padding:8px 12px;border-radius:8px;margin:12px 0 0">⚠ 目前是示範模式，不會真的讀取截圖內容。到 ⚙ 設定填入 Apps Script 網址後，才會用 AI 辨識。</p>
+  </section>
+
+  <!-- step 2 -->
+  <section class="card">
+    <h2><span class="step">2</span>確認辨識結果</h2>
+    <p class="hint" style="margin-top:-6px">AI 讀取截圖後會自動填入，請確認並補上「訂購者」（MUSINSA 截圖上通常不會有客人名字）。</p>
+    <datalist id="buyerList"></datalist>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>訂購者 *</th><th>品牌</th><th>商品名稱</th><th>選項</th><th>數量</th>
+          <th class="num">韓幣 ₩</th><th class="num">售價 NT$</th><th>MUSINSA 訂單號</th><th></th>
+        </tr></thead>
+        <tbody id="pending"></tbody>
+      </table>
+    </div>
+    <div class="row-actions">
+      <span class="hint" id="rateHint"></span>
+      <button class="btn ghost" onclick="clearPending()">清除</button>
+      <button class="btn" id="saveBtn" onclick="savePending()" disabled>寫入 Google Sheet</button>
+    </div>
+  </section>
+
+  <!-- step 3 -->
+  <section class="card">
+    <h2><span class="step">3</span>訂單總表</h2>
+    <div class="toolbar">
+      <div class="tabs" id="tabs"></div>
+      <input class="search" id="q" placeholder="搜尋訂購者 / 商品 / 訂單號…" oninput="renderList()">
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>日期</th><th>訂購者</th><th>商品</th><th>數量</th><th class="num">韓幣 ₩</th><th class="num">售價 NT$</th>
+          <th>匯款</th><th>到貨</th><th>出貨</th><th>備註</th>
+        </tr></thead>
+        <tbody id="list"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- settings modal -->
+<div class="mask" id="mask" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <h3>設定</h3>
+    <label>Google Apps Script 網址（Web App URL）</label>
+    <input id="setUrl" placeholder="https://script.google.com/macros/s/xxxx/exec">
+    <label>存取密碼（與 Apps Script 內設定一致）</label>
+    <input id="setKey" type="password" placeholder="自訂一組密碼">
+    <label>韓幣 → 台幣匯率（用來試算售價）</label>
+    <input id="setRate" type="number" step="0.0001" placeholder="0.0235">
+    <label>每件加價 NT$（代購費）</label>
+    <input id="setFee" type="number" placeholder="100">
+    <p class="hint">網址留空 = 示範模式（資料只存在這個瀏覽器，用假資料辨識）。</p>
+    <div class="row-actions">
+      <button class="btn ghost" onclick="closeSettings()">取消</button>
+      <button class="btn" onclick="saveSettings()">儲存</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ========== 設定 / 儲存 ========== */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v===null? d : JSON.parse(v);}catch(e){return d} },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+let cfg = store.get('msn_cfg', {url:'', key:'', rate:0.0235, fee:100});
+let orders = [];
+let pending = [];
+let filter = 'all';
+let payTotal = 0; // 截圖底部「결제하기」實付總額
+
+const isLive = () => !!cfg.url;
+
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2200); }
+function fmt(n){ return (Number(n)||0).toLocaleString(); }
+function today(){ return new Date().toISOString().slice(0,10); }
+function calcTwd(krw){ return Math.ceil((Number(krw)||0) * cfg.rate / 10) * 10 + Number(cfg.fee||0); }
+
+/* ========== 後端（Apps Script）呼叫 ========== */
+// 用 text/plain 送出，避開 CORS preflight，Apps Script 才收得到
+async function api(action, payload={}){
+  const res = await fetch(cfg.url, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({action, key:cfg.key, ...payload})
+  });
+  const data = await res.json();
+  if(!data.ok) throw new Error(data.error || '後端錯誤');
+  return data;
+}
+
+/* ========== 示範資料 ========== */
+const DEMO_ORDERS = [
+  {id:'d1',date:'2026-11-18',buyer:'王小美',brand:'MATIN KIM',product:'LOGO COATING JUMPER',option:'BLACK / S',qty:1,krw:129000,twd:3140,orderNo:'2026111812345',paid:true,arrived:true,shipped:false,note:''},
+  {id:'d2',date:'2026-11-20',buyer:'林佳蓉',brand:'Mardi Mercredi',product:'SWEATSHIRT FLOWERMARDI',option:'MELANGE GREY / F',qty:2,krw:89000,twd:2200,orderNo:'2026112055501',paid:true,arrived:false,shipped:false,note:'要分兩包寄'},
+  {id:'d3',date:'2026-11-22',buyer:'陳怡君',brand:'ADER ERROR',product:'Twinkle logo cap',option:'NAVY / FREE',qty:1,krw:72000,twd:1800,orderNo:'2026112277120',paid:false,arrived:false,shipped:false,note:''},
+  {id:'d4',date:'2026-11-10',buyer:'王小美',brand:'thisisneverthat',product:'T-Logo Hoodie',option:'CHARCOAL / M',qty:1,krw:99000,twd:2440,orderNo:'2026111033001',paid:true,arrived:true,shipped:true,note:'已寄 7-11'}
+];
+// 示範模式：假裝 AI 辨識出來的結果
+// ⚠ 示範模式不會真的讀圖，只回傳固定假資料
+function demoParse(){
+  const items = [
+    {brand:'(示範假資料)',product:'尚未連線，這不是你截圖的內容',productZh:'請到 ⚙ 設定填入 Apps Script 網址',option:'—',qty:1,krw:0,orderNo:''}
+  ];
+  return new Promise(r=>setTimeout(()=>r({items,total:0}),600));
+}
+
+/* ========== 載入訂單 ========== */
+async function loadOrders(){
+  if(isLive()){
+    try{ const d = await api('list'); orders = d.orders; }
+    catch(e){ toast('讀取失敗：'+e.message); }
+  }else{
+    orders = store.get('msn_demo_orders', DEMO_ORDERS);
+  }
+  renderAll();
+}
+
+/* ========== 上傳 & 辨識 ========== */
+const drop = document.getElementById('drop'), fileIn = document.getElementById('file');
+drop.onclick = ()=>fileIn.click();
+fileIn.onchange = e => handleFiles(e.target.files);
+drop.ondragover = e=>{e.preventDefault();drop.classList.add('over')};
+drop.ondragleave = ()=>drop.classList.remove('over');
+drop.ondrop = e=>{e.preventDefault();drop.classList.remove('over');handleFiles(e.dataTransfer.files)};
+document.addEventListener('paste', e=>{
+  const files=[...e.clipboardData.items].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile());
+  if(files.length) handleFiles(files);
+});
+
+// 壓縮圖片（長邊 1600px），減少上傳量
+function compress(file){
+  return new Promise(res=>{
+    const img=new Image(); img.onload=()=>{
+      const s=Math.min(1, 1600/Math.max(img.width,img.height));
+      const c=document.createElement('canvas'); c.width=img.width*s; c.height=img.height*s;
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      res(c.toDataURL('image/jpeg',0.85));
+    }; img.src=URL.createObjectURL(file);
+  });
+}
+
+async function handleFiles(list){
+  for(const f of list){
+    if(!f.type.startsWith('image/')) continue;
+    const box=document.createElement('div'); box.className='thumb';
+    box.innerHTML=`<img src="${URL.createObjectURL(f)}"><div class="st">辨識中…</div>`;
+    document.getElementById('thumbs').appendChild(box);
+    await parseOne(f, box);
+  }
+  fileIn.value='';
+}
+
+async function parseOne(f, box){
+    box.onclick=null; box.style.cursor=''; box.querySelector('.st').textContent='辨識中…';
+    try{
+      let d;
+      if(isLive()){
+        const dataUrl = await compress(f);
+        d = await api('parse', {image: dataUrl.split(',')[1], mime:'image/jpeg'});
+      }else{
+        d = await demoParse();
+      }
+      if(d.total) payTotal = Math.max(payTotal, Number(d.total)||0);
+      let added=0, dup=0;
+      (d.items||[]).forEach(it=>{
+        const row={buyer:'', brand:it.brand||'', product:it.product||'', productZh:it.productZh||'', option:it.option||'',
+          qty:Number(it.qty)||1, krw:Number(String(it.krw).replace(/[^0-9]/g,''))||0, orderNo:it.orderNo||''};
+        row.twd=calcTwd(row.krw*row.qty);
+        // 同一張訂單分多張截圖時，畫面重疊的商品只保留一筆
+        if(pending.some(p=>p.brand===row.brand&&p.product===row.product&&p.option===row.option&&p.krw===row.krw)){ dup++; return; }
+        pending.push(row); added++;
+      });
+      box.querySelector('.st').textContent = isLive() ? `✓ ${added} 件${dup?`（略過重複 ${dup}）`:''}` : '示範假資料';
+    }catch(e){
+      box.querySelector('.st').textContent='✕ 失敗・點我重試'; box.style.cursor='pointer';
+      box.onclick=()=>parseOne(f, box);
+      toast('辨識失敗：'+e.message);
+    }
+    renderPending();
+}
+
+/* ========== 待確認區 ========== */
+function renderPending(){
+  const tb=document.getElementById('pending');
+  document.getElementById('buyerList').innerHTML=[...new Set(orders.map(o=>o.buyer))].map(b=>`<option value="${b}">`).join('');
+  const sum = pending.reduce((a,p)=>a+p.krw*p.qty,0);
+  let chk = '';
+  if(payTotal && pending.length){
+    chk = sum===payTotal ? ` · ✓ 合計 ₩${fmt(sum)} 與實付相符`
+      : ` · 商品合計 ₩${fmt(sum)}／實付 ₩${fmt(payTotal)}（差 ₩${fmt(sum-payTotal)}，可能是結帳折扣或漏截商品）`;
+  }
+  document.getElementById('rateHint').textContent=`售價試算：₩ × ${cfg.rate}（進位到十位）+ NT$${cfg.fee}${chk}`;
+  if(!pending.length){ tb.innerHTML='<tr><td colspan="9" class="empty">尚無資料，先上傳截圖</td></tr>'; document.getElementById('saveBtn').disabled=true; return; }
+  tb.innerHTML=pending.map((p,i)=>`<tr>
+    <td><input list="buyerList" value="${p.buyer}" placeholder="客人名字" oninput="pending[${i}].buyer=this.value;checkSave()"></td>
+    <td><input value="${p.brand}" oninput="pending[${i}].brand=this.value"></td>
+    <td style="min-width:220px"><input value="${p.product}" oninput="pending[${i}].product=this.value"><input value="${p.productZh||''}" placeholder="中文品名" style="font-size:12px;color:var(--muted)" oninput="pending[${i}].productZh=this.value"></td>
+    <td><input value="${p.option}" oninput="pending[${i}].option=this.value"></td>
+    <td style="width:60px"><input type="number" value="${p.qty}" oninput="pending[${i}].qty=+this.value"></td>
+    <td style="width:100px"><input class="num" type="number" value="${p.krw}" oninput="pending[${i}].krw=+this.value;pending[${i}].twd=calcTwd(this.value*pending[${i}].qty);this.closest('tr').querySelector('.twd').value=pending[${i}].twd"></td>
+    <td style="width:100px"><input class="num twd" type="number" value="${p.twd}" oninput="pending[${i}].twd=+this.value"></td>
+    <td><input value="${p.orderNo}" oninput="pending[${i}].orderNo=this.value"></td>
+    <td><button class="btn ghost sm" onclick="pending.splice(${i},1);renderPending()">刪</button></td>
+  </tr>`).join('');
+  checkSave();
+}
+function checkSave(){ document.getElementById('saveBtn').disabled = !pending.length || pending.some(p=>!p.buyer.trim()); }
+function clearPending(){ pending=[]; payTotal=0; document.getElementById('thumbs').innerHTML=''; renderPending(); }
+
+async function savePending(){
+  const rows = pending.map(p=>({...p, date:today(), paid:false, arrived:false, shipped:false, note:''}));
+  if(isLive()){
+    try{ await api('add', {rows}); toast(`已寫入 ${rows.length} 筆到 Google Sheet`); await loadOrders(); }
+    catch(e){ return toast('寫入失敗：'+e.message); }
+  }else{
+    rows.forEach(r=>r.id='d'+Date.now()+Math.random().toString(16).slice(2,6));
+    orders = [...rows, ...orders]; store.set('msn_demo_orders', orders);
+    toast(`已新增 ${rows.length} 筆（示範模式）`); renderAll();
+  }
+  clearPending();
+}
+
+/* ========== 訂單總表 ========== */
+const TABS = [
+  ['all','全部',()=>true],
+  ['unpaid','待匯款',o=>!o.paid],
+  ['waiting','已匯款・待到貨',o=>o.paid&&!o.arrived],
+  ['toship','已到貨・待出貨',o=>o.arrived&&!o.shipped],
+  ['done','已完成',o=>o.shipped],
+];
+function renderTabs(){
+  document.getElementById('tabs').innerHTML = TABS.map(([k,l,f])=>
+    `<span class="tab ${filter===k?'on':''}" onclick="filter='${k}';renderTabs();renderList()">${l} ${orders.filter(f).length}</span>`).join('');
+}
+function renderList(){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const f=TABS.find(t=>t[0]===filter)[2];
+  const rows=orders.filter(f).filter(o=>!q||[o.buyer,o.brand,o.product,o.productZh,o.orderNo].join(' ').toLowerCase().includes(q))
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  document.getElementById('list').innerHTML = rows.length ? rows.map(o=>`<tr>
+    <td style="white-space:nowrap">${String(o.date).slice(5)}</td>
+    <td class="buyer">${o.buyer}</td>
+    <td class="prod"><div class="b">${o.brand}</div>${o.product}${o.productZh?`<div class="o">${o.productZh}</div>`:''}<div class="o">${o.option||''}${o.orderNo?' · #'+o.orderNo:''}</div></td>
+    <td>${o.qty}</td>
+    <td class="num">${fmt(o.krw)}</td>
+    <td class="num"><b>${fmt(o.twd)}</b></td>
+    <td><span class="pill pay ${o.paid?'on':''}" onclick="toggle('${o.id}','paid')">${o.paid?'✓ 已匯款':'未匯款'}</span></td>
+    <td><span class="pill arr ${o.arrived?'on':''}" onclick="toggle('${o.id}','arrived')">${o.arrived?'✓ 已到貨':'未到貨'}</span></td>
+    <td><span class="pill shp ${o.shipped?'on':''}" onclick="toggle('${o.id}','shipped')">${o.shipped?'✓ 已出貨':'未出貨'}</span></td>
+    <td><input value="${o.note||''}" placeholder="—" onchange="update('${o.id}',{note:this.value})"></td>
+  </tr>`).join('') : '<tr><td colspan="10" class="empty">沒有符合的訂單</td></tr>';
+}
+function renderStats(){
+  const s=[
+    ['訂單總數', orders.length],
+    ['待匯款', orders.filter(o=>!o.paid).length],
+    ['待到貨', orders.filter(o=>o.paid&&!o.arrived).length],
+    ['待出貨', orders.filter(o=>o.arrived&&!o.shipped).length],
+    ['未收款 NT$', fmt(orders.filter(o=>!o.paid).reduce((a,o)=>a+Number(o.twd||0),0))],
+  ];
+  document.getElementById('stats').innerHTML=s.map(([l,n])=>`<div class="stat"><div class="l">${l}</div><div class="n">${n}</div></div>`).join('');
+}
+function renderAll(){ renderStats(); renderTabs(); renderList(); renderPending(); }
+
+async function update(id, patch){
+  const o=orders.find(x=>x.id===id); Object.assign(o,patch); renderAll();
+  if(isLive()){ try{ await api('update',{id,patch}); }catch(e){ toast('更新失敗：'+e.message); loadOrders(); } }
+  else store.set('msn_demo_orders', orders);
+}
+function toggle(id, field){ const o=orders.find(x=>x.id===id); update(id, {[field]: !o[field]}); }
+
+/* ========== 設定 ========== */
+function openSettings(){
+  setUrl.value=cfg.url; setKey.value=cfg.key; setRate.value=cfg.rate; setFee.value=cfg.fee;
+  mask.classList.add('on');
+}
+function closeSettings(){ mask.classList.remove('on'); }
+function saveSettings(){
+  cfg={url:setUrl.value.trim(), key:setKey.value, rate:+setRate.value||0.0235, fee:+setFee.value||0};
+  store.set('msn_cfg',cfg); closeSettings(); updateBadge(); loadOrders(); toast('設定已儲存');
+}
+function updateBadge(){
+  const b=document.getElementById('modeBadge');
+  b.className='mode '+(isLive()?'live':'demo'); document.getElementById('demoWarn').style.display=isLive()?'none':'block'; b.textContent=isLive()?'已連線 Google Sheet':'示範模式';
+}
+
+updateBadge(); loadOrders();
+</script>
+</body>
+</html>
