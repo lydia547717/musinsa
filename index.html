@@ -25,7 +25,7 @@
   .card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
   .step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#111;color:#fff;font-size:12px}
   /* stats */
-  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .stats{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
   .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
   .stat .n{font-size:24px;font-weight:700;margin-top:4px}
   .stat .l{color:var(--muted);font-size:12px}
@@ -63,7 +63,7 @@
   .pill.on.pay{background:var(--okbg);color:var(--ok);border-color:transparent}
   .pill.on.arr{background:var(--bluebg);color:var(--blue);border-color:transparent}
   .pill.on.shp{background:#111;color:#fff;border-color:transparent}
-  .buyer{font-weight:600}
+  .buyer{font-weight:600;white-space:nowrap}
   .prod{max-width:300px}
   .prod .b{font-size:11px;color:var(--muted)}
   .prod .o{font-size:12px;color:var(--muted)}
@@ -77,6 +77,21 @@
   .modal input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:99px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
   .toast.on{opacity:1}
+  .pill.on.sp{background:var(--warnbg);color:var(--warn);border-color:transparent}
+  td input.w-in{width:72px;text-align:right;border-color:var(--line);background:#fff}
+  .settle{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+  .pc{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
+  .pc .hd{display:flex;justify-content:space-between;align-items:baseline}
+  .pc .nm{font-weight:700;font-size:15px}
+  .pc .due{font-size:20px;font-weight:700}
+  .pc ul{margin:0;padding-left:16px;color:var(--muted);font-size:12px;line-height:1.7}
+  .pc .bd{display:grid;grid-template-columns:1fr auto;font-size:13px;gap:2px 10px}
+  .pc .bd span:nth-child(even){text-align:right}
+  .pc .warn{font-size:12px;color:var(--warn);background:var(--warnbg);padding:4px 8px;border-radius:6px}
+  .pc .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+  .modal textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;min-height:120px;resize:vertical}
+  .modal.wide{width:min(640px,94vw);max-height:90vh;overflow:auto}
+  .ph{font-size:11px;color:var(--muted);line-height:1.6}
   @media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)} main{padding:12px}}
 </style>
 </head>
@@ -132,21 +147,75 @@
       <div class="tabs" id="tabs"></div>
       <input class="search" id="q" placeholder="搜尋訂購者 / 商品 / 訂單號…" oninput="renderList()">
     </div>
+    <div class="toolbar" style="background:#fbfaf8;border:1px solid var(--line);border-radius:8px;padding:8px 12px">
+      <span style="font-size:13px">本批國際運費 NT$</span>
+      <input id="quickShip" type="number" min="0" style="width:80px;border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:inherit" onchange="setQuickShip(this.value)">
+      <span style="font-size:13px">/ kg</span>
+      <span class="hint">輸入重量時用這個費率計算；已算好的運費不會被改動。</span>
+      <span style="flex:1"></span>
+      <button class="btn ghost sm" onclick="recalcShip()">用目前費率重算</button>
+      <button class="btn sm" onclick="openSplit()">📦 整箱運費分攤</button>
+    </div>
     <div class="scroll">
       <table>
         <thead><tr>
           <th>日期</th><th>訂購者</th><th>商品</th><th>數量</th><th class="num">韓幣 ₩</th><th class="num">售價 NT$</th>
-          <th>匯款</th><th>到貨</th><th>出貨</th><th>備註</th>
+          <th>匯款</th><th>到貨</th><th class="num">重量 kg</th><th class="num">國際運費</th><th>運費</th><th>出貨</th><th>備註</th>
         </tr></thead>
         <tbody id="list"></tbody>
       </table>
     </div>
   </section>
+
+  <!-- step 4 -->
+  <section class="card">
+    <h2><span class="step">4</span>客人結算 &amp; 通知</h2>
+    <p class="hint" style="margin-top:-6px">只列出還有款項沒收齊的客人。應付 = 未匯款的商品金額 + 未收的國際運費。</p>
+    <div class="settle" id="settle"></div>
+  </section>
 </main>
+
+<!-- split modal -->
+<div class="mask" id="splitMask" onclick="if(event.target===this)this.classList.remove('on')">
+  <div class="modal wide" style="width:min(820px,96vw)">
+    <h3>整箱運費分攤</h3>
+    <p class="hint" style="margin-top:0">勾選這一箱裡的商品、填重量和整箱總運費，系統會依重量比例分給每件商品（四捨五入後總和剛好等於總運費）。</p>
+    <div class="toolbar">
+      <span style="font-size:13px">箱號／批次</span>
+      <input id="spName" class="search" style="max-width:200px;flex:none" placeholder="例：11/28 第1箱" oninput="renderSplit()">
+      <span style="font-size:13px">整箱總運費 NT$</span>
+      <input id="spTotal" class="search" type="number" min="0" style="max-width:130px;flex:none" oninput="renderSplit()">
+    </div>
+    <div class="scroll" style="max-height:46vh;overflow:auto">
+      <table>
+        <thead><tr><th><input type="checkbox" id="spAll" onchange="spRows.forEach(r=>r.on=this.checked);renderSplit()"></th><th>訂購者</th><th>商品</th><th>狀態</th><th class="num">重量 kg</th><th class="num">比例</th><th class="num">分攤運費</th></tr></thead>
+        <tbody id="spBody"></tbody>
+      </table>
+    </div>
+    <div id="spSum" class="hint" style="margin-top:10px"></div>
+    <div class="row-actions">
+      <button class="btn ghost" onclick="splitMask.classList.remove('on')">取消</button>
+      <button class="btn" id="spApply" onclick="applySplit()">套用分攤</button>
+    </div>
+  </div>
+</div>
+
+<!-- message modal -->
+<div class="mask" id="msgMask" onclick="if(event.target===this)this.classList.remove('on')">
+  <div class="modal wide">
+    <h3 id="msgTitle">通知訊息</h3>
+    <div class="tabs" id="msgTabs" style="margin-bottom:10px"></div>
+    <textarea id="msgText" style="min-height:260px"></textarea>
+    <div class="row-actions">
+      <button class="btn ghost" onclick="msgMask.classList.remove('on')">關閉</button>
+      <button class="btn" onclick="copyMsg()">複製訊息</button>
+    </div>
+  </div>
+</div>
 
 <!-- settings modal -->
 <div class="mask" id="mask" onclick="if(event.target===this)closeSettings()">
-  <div class="modal">
+  <div class="modal wide">
     <h3>設定</h3>
     <label>Google Apps Script 網址（Web App URL）</label>
     <input id="setUrl" placeholder="https://script.google.com/macros/s/xxxx/exec">
@@ -156,6 +225,17 @@
     <input id="setRate" type="number" step="0.0001" placeholder="0.0235">
     <label>每件加價 NT$（代購費）</label>
     <input id="setFee" type="number" placeholder="100">
+    <label>國際運費：每公斤 NT$</label>
+    <input id="setShip" type="number" placeholder="250">
+    <label>計費重量單位 kg（不足一單位無條件進位）</label>
+    <input id="setUnit" type="number" step="0.1" placeholder="0.1">
+    <label>匯款帳號（會帶入訊息模板的 {帳號}）</label>
+    <input id="setBank" placeholder="例：(812) 台新銀行 1234-5678-9012">
+    <label>模板①：下單確認・請匯款</label>
+    <textarea id="setT1"></textarea>
+    <label>模板②：到貨・補運費通知</label>
+    <textarea id="setT2"></textarea>
+    <p class="ph">可用代碼：{客人} {明細} {商品金額} {總重量} {運費} {應付金額} {帳號}</p>
     <p class="hint">網址留空 = 示範模式（資料只存在這個瀏覽器，用假資料辨識）。</p>
     <div class="row-actions">
       <button class="btn ghost" onclick="closeSettings()">取消</button>
@@ -171,7 +251,22 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v===null? d : JSON.parse(v);}catch(e){return d} },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
-let cfg = store.get('msn_cfg', {url:'', key:'', rate:0.0235, fee:100});
+const DEFAULT_T1 = `{客人} 您好～
+這次幫您下單的商品如下：
+{明細}
+
+商品金額共 NT\${商品金額}
+麻煩匯款至：{帳號}
+匯款後再告知帳號末五碼，謝謝！`;
+const DEFAULT_T2 = `{客人} 您好～
+您的商品已經抵達台灣囉！
+{明細}
+
+總重量 {總重量} kg，國際運費 NT\${運費}
+本次需補款 NT\${應付金額}
+麻煩匯款至：{帳號}
+收到款項後會盡快幫您出貨，謝謝！`;
+let cfg = Object.assign({url:'', key:'', rate:0.0235, fee:100, ship:250, unit:0.1, bank:'', t1:DEFAULT_T1, t2:DEFAULT_T2}, store.get('msn_cfg', {}));
 let orders = [];
 let pending = [];
 let filter = 'all';
@@ -182,6 +277,12 @@ const isLive = () => !!cfg.url;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2200); }
 function fmt(n){ return (Number(n)||0).toLocaleString(); }
 function today(){ return new Date().toISOString().slice(0,10); }
+function calcShip(w){
+  w=Number(w)||0; if(!w) return 0;
+  const u=Number(cfg.unit)||0.1;
+  const billed=Math.ceil(Math.round(w/u*1000)/1000)*u;   // 進位到計費單位
+  return Math.round(billed*(Number(cfg.ship)||0));
+}
 function calcTwd(krw){ return Math.ceil((Number(krw)||0) * cfg.rate / 10) * 10 + Number(cfg.fee||0); }
 
 /* ========== 後端（Apps Script）呼叫 ========== */
@@ -199,10 +300,10 @@ async function api(action, payload={}){
 
 /* ========== 示範資料 ========== */
 const DEMO_ORDERS = [
-  {id:'d1',date:'2026-11-18',buyer:'王小美',brand:'MATIN KIM',product:'LOGO COATING JUMPER',option:'BLACK / S',qty:1,krw:129000,twd:3140,orderNo:'2026111812345',paid:true,arrived:true,shipped:false,note:''},
+  {id:'d1',date:'2026-11-18',buyer:'王小美',brand:'MATIN KIM',product:'LOGO COATING JUMPER',option:'BLACK / S',qty:1,krw:129000,twd:3140,orderNo:'2026111812345',paid:true,arrived:true,shipped:false,note:'',weight:0.85,shipFee:225,shipPaid:false},
   {id:'d2',date:'2026-11-20',buyer:'林佳蓉',brand:'Mardi Mercredi',product:'SWEATSHIRT FLOWERMARDI',option:'MELANGE GREY / F',qty:2,krw:89000,twd:2200,orderNo:'2026112055501',paid:true,arrived:false,shipped:false,note:'要分兩包寄'},
-  {id:'d3',date:'2026-11-22',buyer:'陳怡君',brand:'ADER ERROR',product:'Twinkle logo cap',option:'NAVY / FREE',qty:1,krw:72000,twd:1800,orderNo:'2026112277120',paid:false,arrived:false,shipped:false,note:''},
-  {id:'d4',date:'2026-11-10',buyer:'王小美',brand:'thisisneverthat',product:'T-Logo Hoodie',option:'CHARCOAL / M',qty:1,krw:99000,twd:2440,orderNo:'2026111033001',paid:true,arrived:true,shipped:true,note:'已寄 7-11'}
+  {id:'d3',date:'2026-11-22',buyer:'陳怡君',brand:'ADER ERROR',product:'Twinkle logo cap',option:'NAVY / FREE',qty:1,krw:72000,twd:1800,orderNo:'2026112277120',paid:false,weight:0,shipFee:0,shipPaid:false,arrived:false,shipped:false,note:''},
+  {id:'d4',date:'2026-11-10',buyer:'王小美',brand:'thisisneverthat',product:'T-Logo Hoodie',option:'CHARCOAL / M',qty:1,krw:99000,twd:2440,orderNo:'2026111033001',paid:true,arrived:true,shipped:true,note:'已寄 7-11',weight:0.9,shipFee:225,shipPaid:true}
 ];
 // 示範模式：假裝 AI 辨識出來的結果
 // ⚠ 示範模式不會真的讀圖，只回傳固定假資料
@@ -317,7 +418,7 @@ function checkSave(){ document.getElementById('saveBtn').disabled = !pending.len
 function clearPending(){ pending=[]; payTotal=0; document.getElementById('thumbs').innerHTML=''; renderPending(); }
 
 async function savePending(){
-  const rows = pending.map(p=>({...p, date:today(), paid:false, arrived:false, shipped:false, note:''}));
+  const rows = pending.map(p=>({...p, date:today(), paid:false, arrived:false, shipped:false, note:'', weight:'', shipFee:'', shipPaid:false, batch:''}));
   if(isLive()){
     try{ await api('add', {rows}); toast(`已寫入 ${rows.length} 筆到 Google Sheet`); await loadOrders(); }
     catch(e){ return toast('寫入失敗：'+e.message); }
@@ -334,6 +435,8 @@ const TABS = [
   ['all','全部',()=>true],
   ['unpaid','待匯款',o=>!o.paid],
   ['waiting','已匯款・待到貨',o=>o.paid&&!o.arrived],
+  ['noweight','已到貨・未填重量',o=>o.arrived&&!Number(o.weight)],
+  ['shipdue','待補運費',o=>o.shipFee>0&&!o.shipPaid],
   ['toship','已到貨・待出貨',o=>o.arrived&&!o.shipped],
   ['done','已完成',o=>o.shipped],
 ];
@@ -344,7 +447,7 @@ function renderTabs(){
 function renderList(){
   const q=document.getElementById('q').value.trim().toLowerCase();
   const f=TABS.find(t=>t[0]===filter)[2];
-  const rows=orders.filter(f).filter(o=>!q||[o.buyer,o.brand,o.product,o.productZh,o.orderNo].join(' ').toLowerCase().includes(q))
+  const rows=orders.filter(f).filter(o=>!q||[o.buyer,o.brand,o.product,o.productZh,o.orderNo,o.batch].join(' ').toLowerCase().includes(q))
     .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   document.getElementById('list').innerHTML = rows.length ? rows.map(o=>`<tr>
     <td style="white-space:nowrap">${String(o.date).slice(5)}</td>
@@ -355,9 +458,12 @@ function renderList(){
     <td class="num"><b>${fmt(o.twd)}</b></td>
     <td><span class="pill pay ${o.paid?'on':''}" onclick="toggle('${o.id}','paid')">${o.paid?'✓ 已匯款':'未匯款'}</span></td>
     <td><span class="pill arr ${o.arrived?'on':''}" onclick="toggle('${o.id}','arrived')">${o.arrived?'✓ 已到貨':'未到貨'}</span></td>
+    <td><input class="w-in" type="number" step="0.01" min="0" value="${o.weight||''}" placeholder="—" onchange="setWeight('${o.id}',this.value)"></td>
+    <td><input class="w-in" type="number" min="0" value="${o.shipFee||''}" placeholder="—" onchange="update('${o.id}',{shipFee:+this.value||0})">${o.batch?`<div class="hint" style="font-size:11px;text-align:right;white-space:nowrap">📦 ${o.batch}</div>`:''}</td>
+    <td>${o.shipFee?`<span class="pill sp ${o.shipPaid?'':'on'}" onclick="toggle('${o.id}','shipPaid')">${o.shipPaid?'✓ 已收':'待補款'}</span>`:'<span class="hint">—</span>'}</td>
     <td><span class="pill shp ${o.shipped?'on':''}" onclick="toggle('${o.id}','shipped')">${o.shipped?'✓ 已出貨':'未出貨'}</span></td>
     <td><input value="${o.note||''}" placeholder="—" onchange="update('${o.id}',{note:this.value})"></td>
-  </tr>`).join('') : '<tr><td colspan="10" class="empty">沒有符合的訂單</td></tr>';
+  </tr>`).join('') : '<tr><td colspan="13" class="empty">沒有符合的訂單</td></tr>';
 }
 function renderStats(){
   const s=[
@@ -365,11 +471,145 @@ function renderStats(){
     ['待匯款', orders.filter(o=>!o.paid).length],
     ['待到貨', orders.filter(o=>o.paid&&!o.arrived).length],
     ['待出貨', orders.filter(o=>o.arrived&&!o.shipped).length],
-    ['未收款 NT$', fmt(orders.filter(o=>!o.paid).reduce((a,o)=>a+Number(o.twd||0),0))],
+    ['待補運費', orders.filter(o=>o.shipFee>0&&!o.shipPaid).length],
+    ['未收款 NT$', fmt(orders.reduce((a,o)=>a+owed(o).total,0))],
   ];
   document.getElementById('stats').innerHTML=s.map(([l,n])=>`<div class="stat"><div class="l">${l}</div><div class="n">${n}</div></div>`).join('');
 }
-function renderAll(){ renderStats(); renderTabs(); renderList(); renderPending(); }
+function renderAll(){ const qs=document.getElementById('quickShip'); if(qs&&document.activeElement!==qs) qs.value=cfg.ship; renderStats(); renderTabs(); renderList(); renderPending(); renderSettle(); }
+
+/* ========== 重量 / 運費 ========== */
+/* ========== 整箱運費分攤 ========== */
+let spRows=[];
+function openSplit(){
+  // 候選：還沒出貨、運費還沒收的商品；預設勾選「已到貨且還沒分攤過」的
+  spRows=orders.filter(o=>!o.shipped && !o.shipPaid)
+    .sort((a,b)=>(b.arrived-a.arrived)||String(a.buyer).localeCompare(String(b.buyer)))
+    .map(o=>({o, on: !!o.arrived && !o.batch, w: Number(o.weight)||''}));
+  spName.value=''; spTotal.value='';
+  renderSplit(); splitMask.classList.add('on');
+}
+function allocate(){
+  const total=Math.max(0,Math.round(Number(spTotal.value)||0));
+  const sel=spRows.filter(r=>r.on && Number(r.w)>0);
+  const sumW=sel.reduce((a,r)=>a+Number(r.w),0);
+  spRows.forEach(r=>{r.fee=0;r.pct=0});
+  if(!total||!sumW) return {total,sumW,sel};
+  // 最大餘數法：先無條件捨去，差額依小數大小補 1 元，總和剛好等於總運費
+  sel.forEach(r=>{ const raw=total*Number(r.w)/sumW; r.fee=Math.floor(raw); r.rem=raw-r.fee; r.pct=Number(r.w)/sumW; });
+  let left=total-sel.reduce((a,r)=>a+r.fee,0);
+  [...sel].sort((a,b)=>b.rem-a.rem).forEach(r=>{ if(left>0){ r.fee++; left--; } });
+  return {total,sumW,sel};
+}
+function renderSplit(){
+  const {total,sumW,sel}=allocate();
+  spBody.innerHTML = spRows.length ? spRows.map((r,i)=>`<tr style="${r.on?'':'opacity:.45'}">
+    <td><input type="checkbox" ${r.on?'checked':''} onchange="spRows[${i}].on=this.checked;renderSplit()"></td>
+    <td class="buyer">${r.o.buyer}</td>
+    <td class="prod"><div class="b">${r.o.brand}</div>${r.o.productZh||r.o.product}${r.o.qty>1?' ×'+r.o.qty:''}</td>
+    <td>${r.o.arrived?'<span class="pill arr on">已到貨</span>':'<span class="pill">未到貨</span>'}${r.o.batch?`<div class="hint" style="font-size:11px">已分攤：${r.o.batch}</div>`:''}</td>
+    <td><input class="w-in" type="number" step="0.01" min="0" value="${r.w}" onchange="spRows[${i}].w=this.value;renderSplit()"></td>
+    <td class="num">${r.on&&r.pct?(r.pct*100).toFixed(1)+'%':'—'}</td>
+    <td class="num"><b>${r.on&&r.fee?'NT$'+fmt(r.fee):'—'}</b></td>
+  </tr>`).join('') : '<tr><td colspan="7" class="empty">沒有可分攤的商品</td></tr>';
+  spAll.checked = spRows.length && spRows.every(r=>r.on);
+  const noW=spRows.filter(r=>r.on && !(Number(r.w)>0)).length;
+  const per = sumW? Math.round(total/sumW) : 0;
+  spSum.innerHTML = `已選 ${sel.length} 件・總重 ${+sumW.toFixed(2)} kg` + (total&&sumW?`・平均 NT$${fmt(per)}/kg・分攤合計 NT$${fmt(sel.reduce((a,r)=>a+r.fee,0))}`:'')
+    + (noW?`<br><span style="color:var(--warn)">⚠ 有 ${noW} 件勾選了但沒填重量，不會分到運費</span>`:'');
+  spApply.disabled = !(total && sel.length);
+}
+async function applySplit(){
+  const {total,sel}=allocate();
+  const name=spName.value.trim() || `${today().slice(5).replace('-','/')} 到貨`;
+  if(!confirm(`把 NT$${fmt(total)} 分攤給 ${sel.length} 件商品（${name}）？`)) return;
+  const updates=sel.map(r=>{ const patch={weight:Number(r.w), shipFee:r.fee, batch:name, arrived:true}; Object.assign(r.o,patch); return {id:r.o.id,patch}; });
+  splitMask.classList.remove('on'); renderAll();
+  if(isLive()){ try{ await api('updateMany',{updates}); toast(`已分攤 ${updates.length} 件運費`); }catch(e){ toast('更新失敗：'+e.message); loadOrders(); } }
+  else { store.set('msn_demo_orders', orders); toast(`已分攤 ${updates.length} 件運費`); }
+}
+
+function setQuickShip(v){ cfg.ship=Math.max(0,Number(v)||0); store.set('msn_cfg',cfg); toast(`本批運費已改為 NT$${cfg.ship}/kg`); }
+async function recalcShip(){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const f=TABS.find(t=>t[0]===filter)[2];
+  const targets=orders.filter(f).filter(o=>!q||[o.buyer,o.brand,o.product,o.productZh,o.orderNo].join(' ').toLowerCase().includes(q))
+    .filter(o=>Number(o.weight)>0 && !o.shipPaid && calcShip(o.weight)!==Number(o.shipFee));
+  if(!targets.length) return toast('列表中沒有需要重算的運費（已收運費的不會改）');
+  if(!confirm(`用 NT$${cfg.ship}/kg 重算目前列表中 ${targets.length} 筆的國際運費？\n（運費已收的品項不會變動）`)) return;
+  const updates=targets.map(o=>{ o.shipFee=calcShip(o.weight); return {id:o.id,patch:{shipFee:o.shipFee}}; });
+  renderAll();
+  if(isLive()){ try{ await api('updateMany',{updates}); toast(`已重算 ${updates.length} 筆`); }catch(e){ toast('更新失敗：'+e.message); loadOrders(); } }
+  else { store.set('msn_demo_orders', orders); toast(`已重算 ${updates.length} 筆`); }
+}
+function setWeight(id, v){ const w=Math.max(0, Number(v)||0); update(id, {weight:w, shipFee:calcShip(w)}); }
+function owed(o){
+  const goods = o.paid ? 0 : Number(o.twd||0);
+  const ship  = (o.shipFee>0 && !o.shipPaid) ? Number(o.shipFee) : 0;
+  return {goods, ship, total:goods+ship};
+}
+
+/* ========== 客人結算 ========== */
+function buyerGroups(){
+  const g={};
+  orders.forEach(o=>{ const k=(o.buyer||'').trim()||'(未填)'; (g[k]=g[k]||[]).push(o); });
+  return Object.entries(g).map(([name,list])=>{
+    const due=list.filter(o=>owed(o).total>0);
+    return {name, list, due,
+      goods: due.reduce((a,o)=>a+owed(o).goods,0),
+      ship:  due.reduce((a,o)=>a+owed(o).ship,0),
+      weight: due.filter(o=>owed(o).ship>0).reduce((a,o)=>a+Number(o.weight||0),0),
+      missing: list.filter(o=>o.arrived&&!o.shipped&&!Number(o.weight)).length };
+  }).filter(b=>b.goods+b.ship>0).sort((a,b)=>(b.goods+b.ship)-(a.goods+a.ship));
+}
+function renderSettle(){
+  const el=document.getElementById('settle'); if(!el) return;
+  const gs=buyerGroups();
+  el.innerHTML = gs.length ? gs.map((b,i)=>`<div class="pc">
+    <div class="hd"><span class="nm">${b.name}</span><span class="due">NT$${fmt(b.goods+b.ship)}</span></div>
+    <ul>${b.due.map(o=>`<li>${o.brand} ${o.productZh||o.product}${o.qty>1?' ×'+o.qty:''}${owed(o).goods?` · 商品 NT$${fmt(owed(o).goods)}`:''}${owed(o).ship?` · ${o.weight}kg 運費 NT$${fmt(owed(o).ship)}`:''}</li>`).join('')}</ul>
+    <div class="bd"><span>未匯商品款</span><span>NT$${fmt(b.goods)}</span><span>未收國際運費${b.weight?`（${+b.weight.toFixed(2)} kg）`:''}</span><span>NT$${fmt(b.ship)}</span></div>
+    ${b.missing?`<div class="warn">⚠ 還有 ${b.missing} 件已到貨但未填重量，運費還沒算進去</div>`:''}
+    <div class="acts">
+      <button class="btn ghost sm" onclick="openMsg(${i},'t1')">下單／匯款通知</button>
+      <button class="btn ghost sm" onclick="openMsg(${i},'t2')">補運費通知</button>
+      <button class="btn sm" onclick="markPaid(${i})">標記已收款</button>
+    </div></div>`).join('') : '<div class="empty">目前所有客人都已結清</div>';
+}
+
+/* ========== 訊息模板 ========== */
+let msgCtx=null;
+function fillTpl(tpl, b){
+  const lines=b.due.map(o=>{
+    let t=`・${o.brand} ${o.product}${o.option?`（${o.option}）`:''} ×${o.qty}`;
+    if(owed(o).goods) t+=` NT$${fmt(o.twd)}`;
+    if(owed(o).ship)  t+=` ｜${o.weight}kg 運費 NT$${fmt(o.shipFee)}`;
+    return t;
+  }).join('\n');
+  const map={'客人':b.name,'明細':lines,'商品金額':fmt(b.goods),'總重量':+b.weight.toFixed(2),'運費':fmt(b.ship),
+    '應付金額':fmt(b.goods+b.ship),'帳號':cfg.bank||'（請到設定填入匯款帳號）'};
+  return tpl.replace(/\{(客人|明細|商品金額|總重量|運費|應付金額|帳號)\}/g,(_,k)=>map[k]);
+}
+function openMsg(i, which){
+  msgCtx=buyerGroups()[i];
+  const set=w=>{ msgText.value=fillTpl(cfg[w], msgCtx);
+    msgTabs.innerHTML=[['t1','下單／匯款通知'],['t2','補運費通知']].map(([k,l])=>`<span class="tab ${k===w?'on':''}" data-k="${k}">${l}</span>`).join('');
+    msgTabs.querySelectorAll('.tab').forEach(t=>t.onclick=()=>set(t.dataset.k)); };
+  msgTitle.textContent=`傳給 ${msgCtx.name} 的訊息`; set(which); msgMask.classList.add('on');
+}
+async function copyMsg(){
+  try{ await navigator.clipboard.writeText(msgText.value); }
+  catch(e){ msgText.select(); document.execCommand('copy'); }
+  toast('已複製，可以貼到 LINE / IG 傳給客人');
+}
+async function markPaid(i){
+  const b=buyerGroups()[i];
+  if(!confirm(`確認 ${b.name} 已付清 NT$${fmt(b.goods+b.ship)}？`)) return;
+  const updates=b.due.map(o=>{ const patch={}; if(!o.paid) patch.paid=true; if(o.shipFee>0&&!o.shipPaid) patch.shipPaid=true; Object.assign(o,patch); return {id:o.id,patch}; });
+  renderAll();
+  if(isLive()){ try{ await api('updateMany',{updates}); toast(`${b.name} 已標記收款`); }catch(e){ toast('更新失敗：'+e.message); loadOrders(); } }
+  else { store.set('msn_demo_orders', orders); toast(`${b.name} 已標記收款`); }
+}
 
 async function update(id, patch){
   const o=orders.find(x=>x.id===id); Object.assign(o,patch); renderAll();
@@ -381,11 +621,14 @@ function toggle(id, field){ const o=orders.find(x=>x.id===id); update(id, {[fiel
 /* ========== 設定 ========== */
 function openSettings(){
   setUrl.value=cfg.url; setKey.value=cfg.key; setRate.value=cfg.rate; setFee.value=cfg.fee;
+  setShip.value=cfg.ship; setUnit.value=cfg.unit; setBank.value=cfg.bank; setT1.value=cfg.t1; setT2.value=cfg.t2;
   mask.classList.add('on');
 }
 function closeSettings(){ mask.classList.remove('on'); }
 function saveSettings(){
-  cfg={url:setUrl.value.trim(), key:setKey.value, rate:+setRate.value||0.0235, fee:+setFee.value||0};
+  cfg={url:setUrl.value.trim(), key:setKey.value, rate:+setRate.value||0.0235, fee:+setFee.value||0,
+    ship:+setShip.value||0, unit:+setUnit.value||0.1, bank:setBank.value.trim(),
+    t1:setT1.value||DEFAULT_T1, t2:setT2.value||DEFAULT_T2};
   store.set('msn_cfg',cfg); closeSettings(); updateBadge(); loadOrders(); toast('設定已儲存');
 }
 function updateBadge(){
