@@ -46,6 +46,7 @@
   td input:hover{border-color:var(--line)}
   td input:focus{outline:none;border-color:#111;background:#fff}
   .num{text-align:right}
+  #pending td input{border-color:#eeebe6;background:#fff}
   .row-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;align-items:center}
   .btn{border:1px solid #111;background:#111;color:#fff;border-radius:8px;padding:8px 16px;cursor:pointer;font:inherit;font-weight:600}
   .btn.ghost{background:#fff;color:#111}
@@ -121,8 +122,8 @@
 
   <!-- step 2 -->
   <section class="card">
-    <h2><span class="step">2</span>確認辨識結果</h2>
-    <p class="hint" style="margin-top:-6px">AI 讀取截圖後會自動填入，請確認並補上「訂購者」（MUSINSA 截圖上通常不會有客人名字）。</p>
+    <h2><span class="step">2</span>確認辨識結果／手動輸入</h2>
+    <p class="hint" style="margin-top:-6px">AI 讀取截圖後會自動填入，請確認並補上「訂購者」（MUSINSA 截圖上通常不會有客人名字）。辨識失敗或沒有截圖時，按「＋ 手動新增一筆」自己輸入。</p>
     <datalist id="buyerList"></datalist>
     <div class="scroll">
       <table>
@@ -134,7 +135,8 @@
       </table>
     </div>
     <div class="row-actions">
-      <span class="hint" id="rateHint"></span>
+      <button class="btn ghost" onclick="addManual()">＋ 手動新增一筆</button>
+      <span class="hint" id="rateHint" style="flex:1;text-align:right"></span>
       <button class="btn ghost" onclick="clearPending()">清除</button>
       <button class="btn" id="saveBtn" onclick="savePending()" disabled>寫入 Google Sheet</button>
     </div>
@@ -275,6 +277,9 @@ let payTotal = 0; // 截圖底部「결제하기」實付總額
 const isLive = () => !!cfg.url;
 
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),2200); }
+// 把文字轉成安全的 HTML，避免品名或備註裡有 " < 等符號時把整列弄壞
+function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const findOrder = id => orders.find(x=>String(x.id)===String(id));
 function fmt(n){ return (Number(n)||0).toLocaleString(); }
 function today(){ return new Date().toISOString().slice(0,10); }
 function calcShip(w){
@@ -384,7 +389,7 @@ async function parseOne(f, box){
     }catch(e){
       box.querySelector('.st').textContent='✕ 失敗・點我重試'; box.style.cursor='pointer';
       box.onclick=()=>parseOne(f, box);
-      toast('辨識失敗：'+e.message);
+      toast('辨識失敗：'+e.message+'（可點縮圖重試，或按「＋ 手動新增一筆」）');
     }
     renderPending();
 }
@@ -392,7 +397,7 @@ async function parseOne(f, box){
 /* ========== 待確認區 ========== */
 function renderPending(){
   const tb=document.getElementById('pending');
-  document.getElementById('buyerList').innerHTML=[...new Set(orders.map(o=>o.buyer))].map(b=>`<option value="${b}">`).join('');
+  document.getElementById('buyerList').innerHTML=[...new Set(orders.map(o=>o.buyer))].map(b=>`<option value="${esc(b)}">`).join('');
   const sum = pending.reduce((a,p)=>a+p.krw*p.qty,0);
   let chk = '';
   if(payTotal && pending.length){
@@ -400,21 +405,30 @@ function renderPending(){
       : ` · 商品合計 ₩${fmt(sum)}／實付 ₩${fmt(payTotal)}（差 ₩${fmt(sum-payTotal)}，可能是結帳折扣或漏截商品）`;
   }
   document.getElementById('rateHint').textContent=`售價試算：₩ × ${cfg.rate}（進位到十位）+ NT$${cfg.fee}${chk}`;
-  if(!pending.length){ tb.innerHTML='<tr><td colspan="9" class="empty">尚無資料，先上傳截圖</td></tr>'; document.getElementById('saveBtn').disabled=true; return; }
+  if(!pending.length){ tb.innerHTML='<tr><td colspan="9" class="empty">尚無資料：上傳截圖，或按下方「＋ 手動新增一筆」</td></tr>'; document.getElementById('saveBtn').disabled=true; return; }
   tb.innerHTML=pending.map((p,i)=>`<tr>
-    <td><input list="buyerList" value="${p.buyer}" placeholder="客人名字" oninput="pending[${i}].buyer=this.value;checkSave()"></td>
-    <td><input value="${p.brand}" oninput="pending[${i}].brand=this.value"></td>
-    <td style="min-width:220px"><input value="${p.product}" oninput="pending[${i}].product=this.value"><input value="${p.productZh||''}" placeholder="中文品名" style="font-size:12px;color:var(--muted)" oninput="pending[${i}].productZh=this.value"></td>
-    <td><input value="${p.option}" oninput="pending[${i}].option=this.value"></td>
+    <td><input list="buyerList" value="${esc(p.buyer)}" placeholder="客人名字" oninput="pending[${i}].buyer=this.value;checkSave()"></td>
+    <td><input value="${esc(p.brand)}" placeholder="品牌" oninput="pending[${i}].brand=this.value"></td>
+    <td style="min-width:220px"><input value="${esc(p.product)}" placeholder="商品名稱 *" oninput="pending[${i}].product=this.value;checkSave()"><input value="${esc(p.productZh)}" placeholder="中文品名" style="font-size:12px;color:var(--muted)" oninput="pending[${i}].productZh=this.value"></td>
+    <td><input value="${esc(p.option)}" placeholder="顏色／尺寸" oninput="pending[${i}].option=this.value"></td>
     <td style="width:60px"><input type="number" value="${p.qty}" oninput="pending[${i}].qty=+this.value"></td>
     <td style="width:100px"><input class="num" type="number" value="${p.krw}" oninput="pending[${i}].krw=+this.value;pending[${i}].twd=calcTwd(this.value*pending[${i}].qty);this.closest('tr').querySelector('.twd').value=pending[${i}].twd"></td>
     <td style="width:100px"><input class="num twd" type="number" value="${p.twd}" oninput="pending[${i}].twd=+this.value"></td>
-    <td><input value="${p.orderNo}" oninput="pending[${i}].orderNo=this.value"></td>
+    <td><input value="${esc(p.orderNo)}" placeholder="選填" oninput="pending[${i}].orderNo=this.value"></td>
     <td><button class="btn ghost sm" onclick="pending.splice(${i},1);renderPending()">刪</button></td>
   </tr>`).join('');
   checkSave();
 }
-function checkSave(){ document.getElementById('saveBtn').disabled = !pending.length || pending.some(p=>!p.buyer.trim()); }
+function addManual(){
+  const last=pending[pending.length-1];
+  // 沿用上一筆的訂購者，同一位客人連續輸入比較快
+  pending.push({buyer:last?last.buyer:'', brand:'', product:'', productZh:'', option:'', qty:1, krw:0, twd:0, orderNo:'', manual:true});
+  renderPending();
+  const rows=document.querySelectorAll('#pending tr'); const r=rows[rows.length-1];
+  const first=r && (r.querySelector('input[list]').value ? r.querySelectorAll('input')[1] : r.querySelector('input'));
+  if(first) first.focus();
+}
+function checkSave(){ document.getElementById('saveBtn').disabled = !pending.length || pending.some(p=>!p.buyer.trim()||!String(p.product).trim()); }
 function clearPending(){ pending=[]; payTotal=0; document.getElementById('thumbs').innerHTML=''; renderPending(); }
 
 async function savePending(){
@@ -451,18 +465,18 @@ function renderList(){
     .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   document.getElementById('list').innerHTML = rows.length ? rows.map(o=>`<tr>
     <td style="white-space:nowrap">${String(o.date).slice(5)}</td>
-    <td class="buyer">${o.buyer}</td>
-    <td class="prod"><div class="b">${o.brand}</div>${o.product}${o.productZh?`<div class="o">${o.productZh}</div>`:''}<div class="o">${o.option||''}${o.orderNo?' · #'+o.orderNo:''}</div></td>
+    <td class="buyer">${esc(o.buyer)}</td>
+    <td class="prod"><div class="b">${esc(o.brand)}</div>${esc(o.product)}${o.productZh?`<div class="o">${esc(o.productZh)}</div>`:''}<div class="o">${esc(o.option)}${o.orderNo?' · #'+esc(o.orderNo):''}</div></td>
     <td>${o.qty}</td>
     <td class="num">${fmt(o.krw)}</td>
     <td class="num"><b>${fmt(o.twd)}</b></td>
-    <td><span class="pill pay ${o.paid?'on':''}" onclick="toggle('${o.id}','paid')">${o.paid?'✓ 已匯款':'未匯款'}</span></td>
-    <td><span class="pill arr ${o.arrived?'on':''}" onclick="toggle('${o.id}','arrived')">${o.arrived?'✓ 已到貨':'未到貨'}</span></td>
-    <td><input class="w-in" type="number" step="0.01" min="0" value="${o.weight||''}" placeholder="—" onchange="setWeight('${o.id}',this.value)"></td>
-    <td><input class="w-in" type="number" min="0" value="${o.shipFee||''}" placeholder="—" onchange="update('${o.id}',{shipFee:+this.value||0})">${o.batch?`<div class="hint" style="font-size:11px;text-align:right;white-space:nowrap">📦 ${o.batch}</div>`:''}</td>
-    <td>${o.shipFee?`<span class="pill sp ${o.shipPaid?'':'on'}" onclick="toggle('${o.id}','shipPaid')">${o.shipPaid?'✓ 已收':'待補款'}</span>`:'<span class="hint">—</span>'}</td>
-    <td><span class="pill shp ${o.shipped?'on':''}" onclick="toggle('${o.id}','shipped')">${o.shipped?'✓ 已出貨':'未出貨'}</span></td>
-    <td><input value="${o.note||''}" placeholder="—" onchange="update('${o.id}',{note:this.value})"></td>
+    <td><span class="pill pay ${o.paid?'on':''}" onclick="toggle('${esc(o.id)}','paid')">${o.paid?'✓ 已匯款':'未匯款'}</span></td>
+    <td><span class="pill arr ${o.arrived?'on':''}" onclick="toggle('${esc(o.id)}','arrived')">${o.arrived?'✓ 已到貨':'未到貨'}</span></td>
+    <td><input class="w-in" type="number" step="0.01" min="0" value="${o.weight||''}" placeholder="—" onchange="setWeight('${esc(o.id)}',this.value)"></td>
+    <td><input class="w-in" type="number" min="0" value="${o.shipFee||''}" placeholder="—" onchange="update('${esc(o.id)}',{shipFee:+this.value||0})">${o.batch?`<div class="hint" style="font-size:11px;text-align:right;white-space:nowrap">📦 ${esc(o.batch)}</div>`:''}</td>
+    <td>${o.shipFee?`<span class="pill sp ${o.shipPaid?'':'on'}" onclick="toggle('${esc(o.id)}','shipPaid')">${o.shipPaid?'✓ 已收':'待補款'}</span>`:'<span class="hint">—</span>'}</td>
+    <td><span class="pill shp ${o.shipped?'on':''}" onclick="toggle('${esc(o.id)}','shipped')">${o.shipped?'✓ 已出貨':'未出貨'}</span></td>
+    <td><input value="${esc(o.note)}" placeholder="—" onchange="update('${esc(o.id)}',{note:this.value})"></td>
   </tr>`).join('') : '<tr><td colspan="13" class="empty">沒有符合的訂單</td></tr>';
 }
 function renderStats(){
@@ -505,9 +519,9 @@ function renderSplit(){
   const {total,sumW,sel}=allocate();
   spBody.innerHTML = spRows.length ? spRows.map((r,i)=>`<tr style="${r.on?'':'opacity:.45'}">
     <td><input type="checkbox" ${r.on?'checked':''} onchange="spRows[${i}].on=this.checked;renderSplit()"></td>
-    <td class="buyer">${r.o.buyer}</td>
-    <td class="prod"><div class="b">${r.o.brand}</div>${r.o.productZh||r.o.product}${r.o.qty>1?' ×'+r.o.qty:''}</td>
-    <td>${r.o.arrived?'<span class="pill arr on">已到貨</span>':'<span class="pill">未到貨</span>'}${r.o.batch?`<div class="hint" style="font-size:11px">已分攤：${r.o.batch}</div>`:''}</td>
+    <td class="buyer">${esc(r.o.buyer)}</td>
+    <td class="prod"><div class="b">${esc(r.o.brand)}</div>${esc(r.o.productZh||r.o.product)}${r.o.qty>1?' ×'+r.o.qty:''}</td>
+    <td>${r.o.arrived?'<span class="pill arr on">已到貨</span>':'<span class="pill">未到貨</span>'}${r.o.batch?`<div class="hint" style="font-size:11px">已分攤：${esc(r.o.batch)}</div>`:''}</td>
     <td><input class="w-in" type="number" step="0.01" min="0" value="${r.w}" onchange="spRows[${i}].w=this.value;renderSplit()"></td>
     <td class="num">${r.on&&r.pct?(r.pct*100).toFixed(1)+'%':'—'}</td>
     <td class="num"><b>${r.on&&r.fee?'NT$'+fmt(r.fee):'—'}</b></td>
@@ -566,8 +580,8 @@ function renderSettle(){
   const el=document.getElementById('settle'); if(!el) return;
   const gs=buyerGroups();
   el.innerHTML = gs.length ? gs.map((b,i)=>`<div class="pc">
-    <div class="hd"><span class="nm">${b.name}</span><span class="due">NT$${fmt(b.goods+b.ship)}</span></div>
-    <ul>${b.due.map(o=>`<li>${o.brand} ${o.productZh||o.product}${o.qty>1?' ×'+o.qty:''}${owed(o).goods?` · 商品 NT$${fmt(owed(o).goods)}`:''}${owed(o).ship?` · ${o.weight}kg 運費 NT$${fmt(owed(o).ship)}`:''}</li>`).join('')}</ul>
+    <div class="hd"><span class="nm">${esc(b.name)}</span><span class="due">NT$${fmt(b.goods+b.ship)}</span></div>
+    <ul>${b.due.map(o=>`<li>${esc(o.brand)} ${esc(o.productZh||o.product)}${o.qty>1?' ×'+o.qty:''}${owed(o).goods?` · 商品 NT$${fmt(owed(o).goods)}`:''}${owed(o).ship?` · ${o.weight}kg 運費 NT$${fmt(owed(o).ship)}`:''}</li>`).join('')}</ul>
     <div class="bd"><span>未匯商品款</span><span>NT$${fmt(b.goods)}</span><span>未收國際運費${b.weight?`（${+b.weight.toFixed(2)} kg）`:''}</span><span>NT$${fmt(b.ship)}</span></div>
     ${b.missing?`<div class="warn">⚠ 還有 ${b.missing} 件已到貨但未填重量，運費還沒算進去</div>`:''}
     <div class="acts">
@@ -604,19 +618,21 @@ async function copyMsg(){
 }
 async function markPaid(i){
   const b=buyerGroups()[i];
-  if(!confirm(`確認 ${b.name} 已付清 NT$${fmt(b.goods+b.ship)}？`)) return;
+  if(!confirm(`確認 ${esc(b.name)} 已付清 NT$${fmt(b.goods+b.ship)}？`)) return;
   const updates=b.due.map(o=>{ const patch={}; if(!o.paid) patch.paid=true; if(o.shipFee>0&&!o.shipPaid) patch.shipPaid=true; Object.assign(o,patch); return {id:o.id,patch}; });
   renderAll();
-  if(isLive()){ try{ await api('updateMany',{updates}); toast(`${b.name} 已標記收款`); }catch(e){ toast('更新失敗：'+e.message); loadOrders(); } }
-  else { store.set('msn_demo_orders', orders); toast(`${b.name} 已標記收款`); }
+  if(isLive()){ try{ await api('updateMany',{updates}); toast(`${esc(b.name)} 已標記收款`); }catch(e){ toast('更新失敗：'+e.message); loadOrders(); } }
+  else { store.set('msn_demo_orders', orders); toast(`${esc(b.name)} 已標記收款`); }
 }
 
 async function update(id, patch){
-  const o=orders.find(x=>x.id===id); Object.assign(o,patch); renderAll();
+  const o=findOrder(id);
+  if(!o){ toast('找不到這筆訂單，重新載入中…'); return loadOrders(); }
+  Object.assign(o,patch); renderAll();
   if(isLive()){ try{ await api('update',{id,patch}); }catch(e){ toast('更新失敗：'+e.message); loadOrders(); } }
   else store.set('msn_demo_orders', orders);
 }
-function toggle(id, field){ const o=orders.find(x=>x.id===id); update(id, {[field]: !o[field]}); }
+function toggle(id, field){ const o=findOrder(id); if(!o){ toast('找不到這筆訂單，重新載入中…'); return loadOrders(); } update(id, {[field]: !o[field]}); }
 
 /* ========== 設定 ========== */
 function openSettings(){
